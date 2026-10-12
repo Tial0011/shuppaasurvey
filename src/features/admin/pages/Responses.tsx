@@ -10,7 +10,7 @@ import { prettySource } from '@/utils/source';
 import type { SurveyResponse } from '@/lib/types';
 
 export default function Responses() {
-  const { responses, loading, error } = useResponses();
+  const { responses, loading } = useResponses();
   const { questions } = useSurveyConfig();
   const [search, setSearch] = useState('');
   const [source, setSource] = useState('all');
@@ -42,11 +42,6 @@ export default function Responses() {
   };
 
   if (loading) return <Spinner />;
-  if (error) return <div className="card" role="alert" style={{ padding: 24 }}>
-    <h2>Couldn’t load responses</h2>
-    <p className="muted" style={{ marginTop: 8 }}>{error}</p>
-    <p style={{ marginTop: 8 }}>Check that this account has admin access and that the Firestore rules are deployed.</p>
-  </div>;
 
   return (
     <>

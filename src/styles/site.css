@@ -1,10 +1,6 @@
 /* ===== Public site ===== */
 .site-header { position: sticky; top: 0; z-index: 20; background: rgba(250, 251, 253, .85); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
-.site-header .container { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 66px; padding-top: 8px; padding-bottom: 8px; }
-.homepage-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex: none; }
-.homepage-actions .btn { white-space: nowrap; }
-.homepage-actions .btn-primary { box-shadow: 0 5px 14px rgba(37, 99, 236, .22); }
-.homepage-actions .btn-ghost { color: var(--muted); }
+.site-header .container { display: flex; align-items: center; justify-content: space-between; height: 66px; }
 
 .hero { position: relative; overflow: hidden; padding: 72px 0 84px; }
 .hero::before {
@@ -106,18 +102,6 @@
 .thanks-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 26px; }
 .contact-grid { display: grid; gap: 14px; margin-top: 22px; }
 .honeypot { position: absolute; left: -9999px; opacity: 0; height: 0; width: 0; }
-
-@media (max-width: 560px) {
-  .site-header .container { gap: 8px; min-height: 62px; }
-  .homepage-actions { gap: 6px; }
-  .homepage-actions .btn { padding: 9px 10px; font-size: 12px; }
-  .homepage-actions .btn-ghost { padding-inline: 6px; }
-}
-@media (max-width: 380px) {
-  .site-header .container { align-items: flex-start; }
-  .homepage-actions { flex-direction: column-reverse; align-items: stretch; gap: 4px; }
-  .homepage-actions .btn { justify-content: center; padding: 7px 9px; }
-}
 
 @media (max-width: 860px) {
   .hero { padding: 44px 0 56px; }
