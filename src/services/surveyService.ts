@@ -86,7 +86,7 @@ function enc(v: unknown): FsValue {
  * streaming connection. It is far more reliable on flaky mobile networks, and it is covered by
  * the same security rules. Throws an Error whose `code` mirrors the SDK's (e.g. permission-denied).
  */
-async function restCreateResponse(id: string, data: Record<string, unknown>) {
+async function restCreateResponse(id: string, data: Record<string, unknown>): Promise<boolean> {
   const { projectId, apiKey } = firebaseConfig;
   const base = `projects/${projectId}/databases/(default)/documents`;
   const ctrl = new AbortController();
@@ -104,11 +104,11 @@ async function restCreateResponse(id: string, data: Record<string, unknown>) {
         }],
       }),
     });
-    if (res.ok) return;
+    if (res.ok) return true;
     const body = await res.json().catch(() => ({}));
     const status: string = body?.error?.status ?? `http-${res.status}`;
     // Already saved by an earlier attempt that we never heard back from: that's a success.
-    if (status === 'ALREADY_EXISTS') return;
+    if (status === 'ALREADY_EXISTS') return false;
     throw Object.assign(new Error(body?.error?.message ?? status), { code: status.toLowerCase().replace(/_/g, '-') });
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw Object.assign(new Error('timeout'), { code: 'timeout' });
@@ -140,7 +140,7 @@ export async function submitResponse({ id, answers, contact, source, questions, 
   const finalSource = source || sourceFromAnswer(heardFrom) || 'direct';
 
   // Stable id => a retry can never create a duplicate response.
-  await restCreateResponse(id, {
+  const created = await restCreateResponse(id, {
     answers,
     contact,
     source: finalSource,
@@ -150,5 +150,8 @@ export async function submitResponse({ id, answers, contact, source, questions, 
   });
 
   // Public counter: best-effort and never awaited, so it can't hold up the thank-you screen.
-  setDoc(doc(db, 'stats', 'public'), { responseCount: increment(1) }, { merge: true }).catch(() => undefined);
+  // Count only a newly created response. A retry with the same stable id must not inflate totals.
+  if (created) {
+    setDoc(doc(db, 'stats', 'public'), { responseCount: increment(1) }, { merge: true }).catch(() => undefined);
+  }
 }

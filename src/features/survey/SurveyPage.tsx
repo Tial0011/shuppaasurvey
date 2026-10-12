@@ -31,7 +31,7 @@ export default function SurveyPage() {
   const startedAt = useRef(Date.now());
   const started = useRef(false);
   const responseId = useRef(newResponseId());
-  const timedOut = useRef(false);
+  const submitLock = useRef(false);
 
   // Count one "start" per session, the first time the survey is actually shown.
   useEffect(() => {
@@ -72,7 +72,7 @@ export default function SurveyPage() {
   }
 
   if (finished) return shell(<ThankYou earlyAccess={finished.earlyAccess} />);
-  if (already) return shell(<ThankYou earlyAccess={false} alreadyDone onAnother={() => setAlready(false)} />);
+  if (already) return shell(<ThankYou earlyAccess={false} alreadyDone onAnother={startAnotherResponse} />);
 
   const setAnswer = (id: string, v: AnswerValue, advance?: boolean) => {
     setAnswers((a) => ({ ...a, [id]: v }));
@@ -90,7 +90,31 @@ export default function SurveyPage() {
   };
   const back = () => { setError(''); setStep((s) => Math.max(0, s - 1)); };
 
+  const startAnotherResponse = () => {
+    try { localStorage.removeItem(DONE_KEY); } catch { /* storage may be unavailable */ }
+    setAlready(false);
+    setFinished(null);
+    setStep(0);
+    setAnswers({});
+    setContact({ name: '', phone: '', email: '' });
+    setError('');
+    setTrap('');
+    startedAt.current = Date.now();
+    responseId.current = newResponseId();
+  };
+
   const submit = async () => {
+    // React state updates are asynchronous; this ref blocks same-tick double clicks too.
+    if (submitLock.current) return;
+
+    // Re-check required fields at the point of submission in case survey config changed mid-session.
+    const missing = questions.find((question) => question.required && !isAnswered(question, answers[question.id]));
+    if (missing) {
+      setError(`Please answer “${missing.label}” before submitting.`);
+      setStep(Math.max(0, questions.findIndex((question) => question.id === missing.id)));
+      return;
+    }
+
     const email = contact.email.trim();
     const phone = contact.phone.trim();
     if (email && !EMAIL_RE.test(email)) return setError('That email address doesn’t look right.');
@@ -101,6 +125,7 @@ export default function SurveyPage() {
       Object.entries(answers).filter(([id]) => questions.some((x) => x.id === id)),
     ) as Answers;
 
+    submitLock.current = true;
     setSubmitting(true);
     setError('');
     try {
@@ -118,15 +143,12 @@ export default function SurveyPage() {
       setFinished({ earlyAccess: hasContact });
     } catch (e) {
       const code = (e as { code?: string }).code ?? 'unknown';
-      if (code === 'timeout') timedOut.current = true;
-      // The earlier slow attempt actually landed, so this retry looks like an "update": that's a success.
-      if (code === 'permission-denied' && timedOut.current) {
-        try { localStorage.setItem(DONE_KEY, '1'); } catch { /* ignore */ }
-        setFinished({ earlyAccess: hasContact });
-      } else {
-        setError(`We couldn’t send your answers (${code}). Check your connection and tap submit again.`);
-      }
+      // If a timed-out request was actually saved, retrying the stable response id returns
+      // ALREADY_EXISTS and is treated as success by the service. Never infer success from
+      // permission-denied: that can also mean the rules genuinely rejected the submission.
+      setError(`We couldn’t send your answers (${code}). Check your connection and tap submit again.`);
     } finally {
+      submitLock.current = false;
       setSubmitting(false);
     }
   };
@@ -183,7 +205,7 @@ export default function SurveyPage() {
           {error && <p className="error-text q-error" role="alert">{error}</p>}
           <div className="q-nav">
             <button className="btn btn-ghost" onClick={back} disabled={submitting}><Icon name="back" size={16} /> Back</button>
-            <button className="btn btn-primary" onClick={submit} disabled={submitting}>
+            <button className="btn btn-primary" onClick={submit} disabled={submitting} aria-busy={submitting}>
               {submitting ? 'Sending…' : contact.email || contact.phone || contact.name ? 'Submit & claim early access' : 'Submit without contact'}
             </button>
           </div>
