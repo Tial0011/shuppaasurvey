@@ -1,0 +1,56 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // An admin is any signed-in user who has a document at admins/{their uid}.
+    // Create that document by hand in the Firebase console (see README).
+    function isAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    match /admins/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Survey questions + settings: public read, admin write.
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Public counter that powers "spots left". Can only go up by exactly 1.
+    match /stats/public {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['responseCount'])
+                    && request.resource.data.responseCount == 1;
+      allow update: if request.resource.data.keys().hasOnly(['responseCount'])
+                    && request.resource.data.responseCount == resource.data.responseCount + 1;
+      allow delete: if isAdmin();
+    }
+
+    // Survey submissions: anyone can submit, only admins can read or delete.
+    match /responses/{id} {
+      allow create: if request.resource.data.keys().hasOnly(
+                         ['answers', 'contact', 'source', 'isUnimed', 'heardFrom', 'durationSec', 'createdAt'])
+                    && request.resource.data.answers is map
+                    && request.resource.data.createdAt == request.time
+                    && request.resource.data.source is string
+                    && request.resource.data.source.size() <= 40;
+      allow read, delete: if isAdmin();
+      allow update: if false;
+    }
+
+    // Funnel events (visits + survey starts) for completion rate and link clicks.
+    match /events/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['type', 'source', 'createdAt'])
+                    && request.resource.data.type in ['visit', 'start']
+                    && request.resource.data.source is string
+                    && request.resource.data.source.size() <= 40
+                    && request.resource.data.createdAt == request.time;
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+  }
+}
