@@ -1,5 +1,5 @@
 import {
-  addDoc, collection, doc, getDoc, increment, onSnapshot, serverTimestamp, setDoc,
+  addDoc, collection, doc, setDoc as setDocRaw, getDoc, increment, onSnapshot, serverTimestamp, setDoc,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Answers, Contact, EventType, Question, Settings } from '@/lib/types';
@@ -69,7 +69,16 @@ export async function trackEvent(type: EventType, source: string) {
   }
 }
 
+export const newResponseId = () => doc(collection(db, 'responses')).id;
+
+const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+  new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(Object.assign(new Error('timeout'), { code: 'timeout' })), ms);
+    p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+  });
+
 interface SubmitInput {
+  id: string;
   answers: Answers;
   contact: Contact | null;
   source: string;
@@ -77,7 +86,7 @@ interface SubmitInput {
   startedAt: number;
 }
 
-export async function submitResponse({ answers, contact, source, questions, startedAt }: SubmitInput) {
+export async function submitResponse({ id, answers, contact, source, questions, startedAt }: SubmitInput) {
   const unimedQ = questions.find((q) => q.tag === 'unimed');
   const heardQ = questions.find((q) => q.tag === 'heard');
 
@@ -88,15 +97,19 @@ export async function submitResponse({ answers, contact, source, questions, star
   const heardFrom = heardQ && typeof answers[heardQ.id] === 'string' ? (answers[heardQ.id] as string) : null;
   const finalSource = source || sourceFromAnswer(heardFrom) || 'direct';
 
-  await addDoc(collection(db, 'responses'), {
-    answers,
-    contact,
-    source: finalSource,
-    isUnimed,
-    heardFrom,
-    durationSec: Math.max(0, Math.round((Date.now() - startedAt) / 1000)),
-    createdAt: serverTimestamp(),
-  });
+  // Stable id => a retry can never create a duplicate response.
+  await withTimeout(
+    setDocRaw(doc(db, 'responses', id), {
+      answers,
+      contact,
+      source: finalSource,
+      isUnimed,
+      heardFrom,
+      durationSec: Math.max(0, Math.round((Date.now() - startedAt) / 1000)),
+      createdAt: serverTimestamp(),
+    }),
+    20000,
+  );
 
   // Public counter. Best-effort: the response is already saved.
   try {

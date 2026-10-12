@@ -70,3 +70,8 @@ firestore.rules  security rules      firebase.json  hosting config
 - The logo is a placeholder wordmark; swap it in `src/components/ui/Logo.tsx` when the designer's logo is ready.
 - Pricing is intentionally not mentioned anywhere, per the strategy doc.
 - Public visitors can only *create* responses. Only admins can read or delete them (see `firestore.rules`).
+
+## Netlify
+`netlify.toml` and `public/_redirects` are included so routes like `/survey` and `/admin` work on reload.
+Build command `npm run build`, publish directory `dist`. After deploying, add your Netlify domain in
+Firebase → Authentication → Settings → Authorized domains, and re-publish `firestore.rules`.

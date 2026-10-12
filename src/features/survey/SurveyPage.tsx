@@ -6,7 +6,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useSurveyConfig } from '@/hooks/useSurveyConfig';
 import { useVisitTracking } from '@/hooks/useVisitTracking';
 import { getSource } from '@/utils/source';
-import { submitResponse, trackEvent } from '@/services/surveyService';
+import { newResponseId, submitResponse, trackEvent } from '@/services/surveyService';
 import type { AnswerValue, Answers, Contact } from '@/lib/types';
 import { QuestionField, isAnswered } from './QuestionField';
 import { ThankYou } from './ThankYou';
@@ -30,6 +30,8 @@ export default function SurveyPage() {
   });
   const startedAt = useRef(Date.now());
   const started = useRef(false);
+  const responseId = useRef(newResponseId());
+  const timedOut = useRef(false);
 
   // Count one "start" per session, the first time the survey is actually shown.
   useEffect(() => {
@@ -106,6 +108,7 @@ export default function SurveyPage() {
         await submitResponse({
           answers: clean,
           contact: hasContact ? { name: contact.name.trim(), phone, email } : null,
+          id: responseId.current,
           source: getSource(),
           questions,
           startedAt: startedAt.current,
@@ -113,8 +116,16 @@ export default function SurveyPage() {
       }
       try { localStorage.setItem(DONE_KEY, '1'); } catch { /* ignore */ }
       setFinished({ earlyAccess: hasContact });
-    } catch {
-      setError('We couldn’t send your answers. Check your connection and try again.');
+    } catch (e) {
+      const code = (e as { code?: string }).code ?? 'unknown';
+      if (code === 'timeout') timedOut.current = true;
+      // The earlier slow attempt actually landed, so this retry looks like an "update": that's a success.
+      if (code === 'permission-denied' && timedOut.current) {
+        try { localStorage.setItem(DONE_KEY, '1'); } catch { /* ignore */ }
+        setFinished({ earlyAccess: hasContact });
+      } else {
+        setError(`We couldn’t send your answers (${code}). Check your connection and tap submit again.`);
+      }
     } finally {
       setSubmitting(false);
     }

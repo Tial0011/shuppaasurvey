@@ -1,22 +1,26 @@
 import { initializeApp } from 'firebase/app';
 import { getAnalytics, isSupported, type Analytics } from 'firebase/analytics';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
 const env = import.meta.env;
 
 const firebaseConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY,
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: env.VITE_FIREBASE_APP_ID,
-  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID,
+  // Web config is public by design (security comes from firestore.rules), so the
+  // fallbacks keep the site working on Netlify even if env vars aren't set there.
+  apiKey: env.VITE_FIREBASE_API_KEY || 'AIzaSyCK5_DrlAlBkL7bxFyZEGjVSJNIjO4PpdY',
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || 'shuppaa-survey.firebaseapp.com',
+  projectId: env.VITE_FIREBASE_PROJECT_ID || 'shuppaa-survey',
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || 'shuppaa-survey.firebasestorage.app',
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || '1070776935809',
+  appId: env.VITE_FIREBASE_APP_ID || '1:1070776935809:web:d2b47994454f49abbe3480',
+  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || 'G-JGLCYRH3JV',
 };
 
 export const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+// Auto-detect long polling: fixes writes that hang on mobile networks / proxies
+// that buffer Firestore's default streaming connection.
+export const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
 export const auth = getAuth(app);
 
 // Analytics only works in supported browsers (and not when blocked by extensions).

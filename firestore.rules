@@ -35,6 +35,7 @@ service cloud.firestore {
       allow create: if request.resource.data.keys().hasOnly(
                          ['answers', 'contact', 'source', 'isUnimed', 'heardFrom', 'durationSec', 'createdAt'])
                     && request.resource.data.answers is map
+                    && request.resource.data.answers.size() <= 40
                     && request.resource.data.createdAt == request.time
                     && request.resource.data.source is string
                     && request.resource.data.source.size() <= 40;
