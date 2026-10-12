@@ -5,7 +5,7 @@ import { getAuth } from 'firebase/auth';
 
 const env = import.meta.env;
 
-const firebaseConfig = {
+export const firebaseConfig = {
   // Web config is public by design (security comes from firestore.rules), so the
   // fallbacks keep the site working on Netlify even if env vars aren't set there.
   apiKey: env.VITE_FIREBASE_API_KEY || 'AIzaSyCK5_DrlAlBkL7bxFyZEGjVSJNIjO4PpdY',
@@ -18,9 +18,9 @@ const firebaseConfig = {
 };
 
 export const app = initializeApp(firebaseConfig);
-// Auto-detect long polling: fixes writes that hang on mobile networks / proxies
-// that buffer Firestore's default streaming connection.
-export const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+// Force long polling: avoids the streaming connection that breaks on networks where
+// QUIC/HTTP3 or proxies misbehave (ERR_QUIC_PROTOCOL_ERROR).
+export const db = initializeFirestore(app, { experimentalForceLongPolling: true });
 export const auth = getAuth(app);
 
 // Analytics only works in supported browsers (and not when blocked by extensions).

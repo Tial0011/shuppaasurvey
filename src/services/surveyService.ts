@@ -1,7 +1,7 @@
 import {
-  addDoc, collection, doc, setDoc as setDocRaw, getDoc, increment, onSnapshot, serverTimestamp, setDoc,
+  addDoc, collection, doc, getDoc, increment, onSnapshot, serverTimestamp, setDoc,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, firebaseConfig } from '@/lib/firebase';
 import type { Answers, Contact, EventType, Question, Settings } from '@/lib/types';
 import { DEFAULT_QUESTIONS, DEFAULT_SETTINGS } from '@/config/defaultSurvey';
 import { sourceFromAnswer } from '@/utils/source';
@@ -71,11 +71,53 @@ export async function trackEvent(type: EventType, source: string) {
 
 export const newResponseId = () => doc(collection(db, 'responses')).id;
 
-const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
-  new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(Object.assign(new Error('timeout'), { code: 'timeout' })), ms);
-    p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
-  });
+type FsValue = Record<string, unknown>;
+function enc(v: unknown): FsValue {
+  if (v === null || v === undefined) return { nullValue: null };
+  if (typeof v === 'string') return { stringValue: v };
+  if (typeof v === 'boolean') return { booleanValue: v };
+  if (typeof v === 'number') return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+  if (Array.isArray(v)) return { arrayValue: v.length ? { values: v.map(enc) } : {} };
+  return { mapValue: { fields: Object.fromEntries(Object.entries(v as object).map(([k, x]) => [k, enc(x)])) } };
+}
+
+/**
+ * Saves the response with a plain HTTPS request to the Firestore REST API instead of the SDK's
+ * streaming connection. It is far more reliable on flaky mobile networks, and it is covered by
+ * the same security rules. Throws an Error whose `code` mirrors the SDK's (e.g. permission-denied).
+ */
+async function restCreateResponse(id: string, data: Record<string, unknown>) {
+  const { projectId, apiKey } = firebaseConfig;
+  const base = `projects/${projectId}/databases/(default)/documents`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    const res = await fetch(`https://firestore.googleapis.com/v1/${base}:commit?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: ctrl.signal,
+      body: JSON.stringify({
+        writes: [{
+          update: { name: `${base}/responses/${id}`, fields: enc(data).mapValue },
+          updateTransforms: [{ fieldPath: 'createdAt', setToServerValue: 'REQUEST_TIME' }],
+          currentDocument: { exists: false },
+        }],
+      }),
+    });
+    if (res.ok) return;
+    const body = await res.json().catch(() => ({}));
+    const status: string = body?.error?.status ?? `http-${res.status}`;
+    // Already saved by an earlier attempt that we never heard back from: that's a success.
+    if (status === 'ALREADY_EXISTS') return;
+    throw Object.assign(new Error(body?.error?.message ?? status), { code: status.toLowerCase().replace(/_/g, '-') });
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') throw Object.assign(new Error('timeout'), { code: 'timeout' });
+    if (!(e as { code?: string }).code) throw Object.assign(e as Error, { code: 'network' });
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 interface SubmitInput {
   id: string;
@@ -98,23 +140,15 @@ export async function submitResponse({ id, answers, contact, source, questions, 
   const finalSource = source || sourceFromAnswer(heardFrom) || 'direct';
 
   // Stable id => a retry can never create a duplicate response.
-  await withTimeout(
-    setDocRaw(doc(db, 'responses', id), {
-      answers,
-      contact,
-      source: finalSource,
-      isUnimed,
-      heardFrom,
-      durationSec: Math.max(0, Math.round((Date.now() - startedAt) / 1000)),
-      createdAt: serverTimestamp(),
-    }),
-    20000,
-  );
+  await restCreateResponse(id, {
+    answers,
+    contact,
+    source: finalSource,
+    isUnimed,
+    heardFrom,
+    durationSec: Math.max(0, Math.round((Date.now() - startedAt) / 1000)),
+  });
 
-  // Public counter. Best-effort: the response is already saved.
-  try {
-    await setDoc(doc(db, 'stats', 'public'), { responseCount: increment(1) }, { merge: true });
-  } catch {
-    /* ignore */
-  }
+  // Public counter: best-effort and never awaited, so it can't hold up the thank-you screen.
+  setDoc(doc(db, 'stats', 'public'), { responseCount: increment(1) }, { merge: true }).catch(() => undefined);
 }
