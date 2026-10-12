@@ -23,7 +23,10 @@ export default function Landing() {
       <header className="site-header">
         <div className="container">
           <Logo />
-          <Link to="/survey" className="btn btn-primary btn-sm">Take the survey</Link>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <Link to="/admin/login" className="btn btn-ghost btn-sm">Admin login</Link>
+            <Link to="/survey" className="btn btn-primary btn-sm">Take the survey</Link>
+          </div>
         </div>
       </header>
 
@@ -127,7 +130,7 @@ export default function Landing() {
       <footer className="site-footer">
         <div className="container">
           <span>© {new Date().getFullYear()} {BRAND.name}. {BRAND.tagline}</span>
-          <span>Follow us {BRAND.handle}</span>
+          <span>Follow us {BRAND.handle} · <Link to="/admin/login">Admin login</Link></span>
         </div>
       </footer>
     </>
