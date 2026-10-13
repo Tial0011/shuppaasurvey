@@ -75,3 +75,25 @@ firestore.rules  security rules      firebase.json  hosting config
 `netlify.toml` and `public/_redirects` are included so routes like `/survey` and `/admin` work on reload.
 Build command `npm run build`, publish directory `dist`. After deploying, add your Netlify domain in
 Firebase → Authentication → Settings → Authorized domains, and re-publish `firestore.rules`.
+
+## Your live domain: shuppaa.netlify.app
+Add `shuppaa.netlify.app` in Firebase → Authentication → Settings → **Authorized domains** (admin login needs it).
+
+## How the logic flows
+**Visitor**
+1. Opens `/` or `/survey?src=instagram`. `useVisitTracking` stores `src` for the session and writes one `visit` event.
+2. First time the survey is shown, one `start` event is written (completion rate = responses ÷ starts).
+3. One question per screen. Required questions can't be skipped. Single-choice / yes-no / rating auto-advance (guarded so a quick tap on Next never skips a question).
+4. Final step: optional name / phone / email (early access). A hidden honeypot field silently drops bots.
+5. Submit → one HTTPS `commit` to the Firestore REST API with a fixed document ID, so retries never duplicate. `createdAt` is set by the server.
+   Then `stats/public.responseCount` is incremented (best-effort) for the "spots left" counter.
+6. The browser remembers the submission (`localStorage`) and shows a thank-you with a WhatsApp share button.
+
+**Source of a response** = `?src=` link if present, else mapped from the "How did you hear" answer, else `direct`.
+**UNIMED flag** = the question tagged "UNIMED check": first option = UNIMED student.
+
+**Admin**: `/admin/login` → Firebase Auth → app checks `admins/{uid}` exists → loads live responses (`onSnapshot`) → dashboard, filters, insights, CSV, builder, links, settings.
+Survey questions + settings live in `config/survey` and `config/settings`, so edits go live instantly with no redeploy.
+
+## Security model (firestore.rules)
+Public: read config + counter, create responses/events (size-limited, fixed field list). Admin only: read/delete responses, read events, write config.

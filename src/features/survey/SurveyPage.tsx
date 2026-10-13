@@ -44,6 +44,9 @@ export default function SurveyPage() {
     trackEvent('start', getSource());
   }, [loading, settings.isOpen, already]);
 
+  // Bring each new question into view (important on phones, where the card can be taller than the screen).
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [step]);
+
   const total = questions.length;
   const onContactStep = step >= total;
   const progress = useMemo(() => Math.round((step / (total + 1)) * 100), [step, total]);
@@ -77,7 +80,10 @@ export default function SurveyPage() {
   const setAnswer = (id: string, v: AnswerValue, advance?: boolean) => {
     setAnswers((a) => ({ ...a, [id]: v }));
     setError('');
-    if (advance) setTimeout(() => setStep((s) => Math.min(s + 1, total)), 260);
+    // Auto-advance only if the person is still on the question they just answered,
+    // so tapping "Next" quickly never skips a question.
+    const from = step;
+    if (advance) setTimeout(() => setStep((s) => (s === from ? Math.min(s + 1, total) : s)), 260);
   };
 
   const next = () => {
@@ -177,7 +183,7 @@ export default function SurveyPage() {
             <div className="field"><label htmlFor="c-email">Email</label>
               <input id="c-email" className="input" type="email" autoComplete="email" maxLength={120} value={contact.email}
                 onChange={(e) => setContact({ ...contact, email: e.target.value })} /></div>
-            <input className="honeypot" tabIndex={-1} autoComplete="off" aria-hidden="true" name="website"
+            <input className="honeypot" tabIndex={-1} autoComplete="off" aria-hidden="true" name="fax_number_2"
               value={trap} onChange={(e) => setTrap(e.target.value)} />
           </div>
           {error && <p className="error-text q-error" role="alert">{error}</p>}

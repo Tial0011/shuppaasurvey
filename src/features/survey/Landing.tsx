@@ -24,7 +24,7 @@ export default function Landing() {
         <div className="container">
           <Logo />
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <Link to="/admin/login" className="btn btn-ghost btn-sm">Admin login</Link>
+            <Link to="/admin/login" className="btn btn-ghost btn-sm hide-sm">Admin login</Link>
             <Link to="/survey" className="btn btn-primary btn-sm">Take the survey</Link>
           </div>
         </div>

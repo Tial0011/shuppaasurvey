@@ -61,7 +61,7 @@
 .site-footer .container { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 
 /* ===== Survey flow ===== */
-.survey-shell { min-height: 100vh; display: flex; flex-direction: column; background:
+.survey-shell { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; background:
   radial-gradient(900px 400px at 100% -10%, rgba(11,185,183,.12), transparent 60%),
   radial-gradient(800px 400px at -10% 110%, rgba(37,99,236,.10), transparent 60%), var(--surface); }
 .survey-top { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; max-width: 760px; width: 100%; margin: 0 auto; }
@@ -110,3 +110,31 @@
   .section { padding: 52px 0; }
   .q-card { padding: 22px; }
 }
+
+/* ===== Phone polish ===== */
+@media (max-width: 640px) {
+  .site-header .container { height: 60px; }
+  .hero h1 { font-size: 36px; }
+  .hero p.lead { font-size: 17px; }
+  .hero-actions .btn-lg { width: 100%; }
+  .spots-card { padding: 22px; }
+  .spots-number { font-size: 52px; }
+  .cta-band { padding: 40px 20px; border-radius: 22px; }
+  .cta-band .btn-lg { width: 100%; }
+  .site-footer .container { flex-direction: column; }
+  .survey-top { padding: 10px 16px; }
+  .survey-main { width: calc(100% - 24px); padding-bottom: 24px; }
+  .q-card { padding: 20px 16px; border-radius: 16px; }
+  .option { padding: 15px 14px; min-height: 52px; }
+  .rating { gap: 6px; }
+  .rating .option { padding: 16px 0; }
+  .thanks { padding: 32px 18px; }
+  .thanks-actions .btn { width: 100%; }
+  /* Back / Next stay under the thumb while the options scroll */
+  .q-nav {
+    position: sticky; bottom: 0; z-index: 5; margin: 22px -16px -20px; padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+    background: linear-gradient(to bottom, rgba(255,255,255,0), #fff 28%); border-radius: 0 0 16px 16px;
+  }
+  .q-nav .btn { flex: 1; }
+}
+.site-footer a { display: inline-block; padding: 12px 4px; }

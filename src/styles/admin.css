@@ -110,3 +110,18 @@ table.table { width: 100%; border-collapse: collapse; font-size: 14px; }
   .panel-grid { grid-template-columns: 1fr; }
   .builder-row { grid-template-columns: 1fr; }
 }
+
+@media (max-width: 640px) {
+  .admin-main { padding: 20px 14px 48px; }
+  .page-head h1 { font-size: 24px; }
+  .stat-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat { padding: 14px; }
+  .stat .value { font-size: 26px; }
+  .panel, .insight { padding: 16px; }
+  .toolbar .input, .toolbar .select { flex: 1 1 140px; }
+  .table th, .table td { padding: 10px 12px; }
+  .drawer { padding: 18px; }
+  .sticky-save { flex-direction: column; align-items: stretch; text-align: center; }
+  .copy-row { flex-direction: column; align-items: stretch; }
+}
+@media (max-width: 640px) { .stat.primary { grid-column: 1 / -1; } }

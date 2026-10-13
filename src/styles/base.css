@@ -3,7 +3,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {
-  margin: 0; font-family: var(--font); color: var(--ink); background: var(--surface);
+  margin: 0; overflow-x: clip; -webkit-tap-highlight-color: transparent; font-family: var(--font); color: var(--ink); background: var(--surface);
   line-height: 1.55; -webkit-font-smoothing: antialiased;
 }
 h1, h2, h3, h4 { line-height: 1.15; margin: 0; letter-spacing: -0.02em; }
@@ -22,7 +22,7 @@ img, svg { display: block; max-width: 100%; }
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   padding: 12px 22px; border-radius: 999px; border: 1.5px solid transparent;
-  font-weight: 700; font-size: 15px; cursor: pointer; transition: transform .12s, box-shadow .15s, background .15s;
+  font-weight: 700; font-size: 15px; min-height: 44px; cursor: pointer; transition: transform .12s, box-shadow .15s, background .15s;
   text-decoration: none !important; white-space: nowrap;
 }
 .btn:active { transform: translateY(1px); }
@@ -34,14 +34,14 @@ img, svg { display: block; max-width: 100%; }
 .btn-ghost { background: var(--white); border-color: var(--border); color: var(--ink); }
 .btn-ghost:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
 .btn-danger { background: var(--danger-50); color: var(--danger); }
-.btn-sm { padding: 8px 14px; font-size: 13px; }
+.btn-sm { padding: 8px 14px; font-size: 13px; min-height: 40px; }
 .btn-lg { padding: 16px 30px; font-size: 17px; }
 
 /* Forms */
 .field { display: grid; gap: 6px; }
 .field label { font-weight: 600; font-size: 14px; }
 .input, .select, .textarea {
-  width: 100%; padding: 12px 14px; border-radius: var(--radius-sm); border: 1.5px solid var(--border);
+  width: 100%; padding: 12px 14px; font-size: 16px; /* 16px stops iOS zooming on focus */ border-radius: var(--radius-sm); border: 1.5px solid var(--border);
   background: var(--white); transition: border-color .15s, box-shadow .15s;
 }
 .input:focus, .select:focus, .textarea:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 4px var(--blue-50); }
@@ -68,3 +68,10 @@ img, svg { display: block; max-width: 100%; }
 .logo-mark svg { width: 20px; height: 20px; }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+.logo { min-height: 44px; }
+@media (max-width: 520px) {
+  .hide-sm { display: none !important; }
+  .btn-sm { min-height: 44px; }
+  .container { width: min(1120px, 100% - 32px); }
+}

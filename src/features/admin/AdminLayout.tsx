@@ -27,6 +27,7 @@ export default function AdminLayout() {
   return (
     <ResponsesProvider>
       <div className="admin">
+        {open && <div className="drawer-back" style={{ zIndex: 45 }} onClick={() => setOpen(false)} />}
         <aside className={`sidebar${open ? ' open' : ''}`}>
           <Logo to="/admin" />
           <nav className="nav" onClick={() => setOpen(false)}>
