@@ -23,15 +23,3 @@ A production build could not be completed in this environment because npm depend
 - The submit button now always reads "Submit survey" (the old "Submit without contact" option is gone).
 - `firestore.rules` also enforces it on the server (map with name/phone/email, valid sizes, email shape), so it can't be bypassed.
   **Publish the updated rules** (Firestore → Rules → Publish) for the server-side check to apply.
-
-## Submit feel + console messages
-- Console: `[Shuppaa] Submitting survey…` when the button is pressed, then a green `✅ Survey submitted successfully` (with response ID, answer count and source) once Firestore confirms. Personal contact details are never logged. Failures still log `[Shuppaa] Survey submission failed`.
-- The button shows a spinner and "Submitting…" for at least ~1s and the fields lock while sending.
-- After Firestore confirms, a "Submitted successfully" card shows for ~1.4s before the thank-you screen.
-- Pressing Enter in the name/email fields now moves to the next field instead of submitting early. Only Enter in the phone field submits.
-
-## Fix: no more false "success" on FAILED_PRECONDITION
-`FAILED_PRECONDITION` is a broad Firestore status, so it is no longer treated as proof a survey was saved.
-A reply counts as "already saved" only when Firestore returns `ALREADY_EXISTS`, or returns `FAILED_PRECONDITION` whose
-message says the document already exists AND that same response ID had an earlier attempt that timed out or dropped.
-Anything else is shown to the person as a real failure and never reaches the thank-you screen.

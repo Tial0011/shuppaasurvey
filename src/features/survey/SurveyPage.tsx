@@ -25,7 +25,6 @@ export default function SurveyPage() {
   const [trap, setTrap] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [finished, setFinished] = useState<null | { earlyAccess: boolean }>(null);
   const [already, setAlready] = useState(() => {
     try { return localStorage.getItem(DONE_KEY) === '1'; } catch { return false; }
@@ -75,16 +74,6 @@ export default function SurveyPage() {
     );
   }
 
-  if (saved && !finished) {
-    return shell(
-      <div className="card thanks" role="status" aria-live="polite">
-        <div className="thanks-icon"><Icon name="check" /></div>
-        <h2>Submitted successfully</h2>
-        <p>Your answers and details have been saved.</p>
-      </div>,
-    );
-  }
-
   if (finished) return shell(<ThankYou earlyAccess={finished.earlyAccess} />);
   if (already) return shell(<ThankYou earlyAccess={false} alreadyDone onAnother={() => setAlready(false)} />);
 
@@ -129,29 +118,18 @@ export default function SurveyPage() {
 
     setSubmitting(true);
     setError('');
-    console.info('[Shuppaa] Submitting survey…', { responseId: responseId.current });
     try {
-      // Keep the "Submitting…" state on screen for at least a moment so it never feels instant.
-      const minimumWait = new Promise((resolve) => setTimeout(resolve, 900));
       if (!trap) {
-        await Promise.all([minimumWait, submitResponse({
+        await submitResponse({
           answers: clean,
           contact: check.value,
           id: responseId.current,
           source: getSource(),
           questions,
           startedAt: startedAt.current,
-        })]);
+        });
       }
-      console.log(
-        '%c[Shuppaa] ✅ Survey submitted successfully',
-        'color:#0bb9b7;font-weight:bold;font-size:13px',
-        { responseId: responseId.current, answers: Object.keys(clean).length, source: getSource() || 'direct' },
-      );
       try { localStorage.setItem(DONE_KEY, '1'); } catch { /* ignore */ }
-      // Show a clear "saved" confirmation before moving to the thank-you screen.
-      setSaved(true);
-      await new Promise((resolve) => setTimeout(resolve, 1400));
       setFinished({ earlyAccess: true });
     } catch (e) {
       const code = (e as { code?: string }).code ?? 'unknown';
@@ -199,7 +177,7 @@ export default function SurveyPage() {
             Add your name, email and WhatsApp number to finish. We’ll use them to get in touch about early access
             (the first {settings.earlyAccessLimit} responders).
           </p>
-          <div className="contact-grid" aria-busy={submitting}>
+          <div className="contact-grid">
             {([
               { key: 'name', label: 'Full name', type: 'text', auto: 'name', max: 80, mode: undefined },
               { key: 'email', label: 'Email address', type: 'email', auto: 'email', max: 120, mode: 'email' },
@@ -208,7 +186,7 @@ export default function SurveyPage() {
               <div className="field" key={f.key}>
                 <label htmlFor={`c-${f.key}`}>{f.label} <span style={{ color: 'var(--danger)' }} aria-hidden="true">*</span></label>
                 <input
-                  id={`c-${f.key}`} className="input" type={f.type} readOnly={submitting} autoComplete={f.auto} maxLength={f.max}
+                  id={`c-${f.key}`} className="input" type={f.type} autoComplete={f.auto} maxLength={f.max}
                   inputMode={f.mode} required aria-required="true" aria-invalid={Boolean(contactErrors[f.key])}
                   aria-describedby={contactErrors[f.key] ? `c-${f.key}-err` : undefined}
                   style={contactErrors[f.key] ? { borderColor: 'var(--danger)' } : undefined}
@@ -219,16 +197,7 @@ export default function SurveyPage() {
                     // Once someone has tried to submit, re-check as they type so errors clear immediately.
                     if (Object.keys(contactErrors).length) setContactErrors(validateContact(next).errors);
                   }}
-                  enterKeyHint={f.key === 'phone' ? 'send' : 'next'}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter') return;
-                    e.preventDefault();
-                    // Enter moves to the next field; only the last field submits.
-                    const order = ['name', 'email', 'phone'];
-                    const nextId = order[order.indexOf(f.key) + 1];
-                    if (nextId) document.getElementById(`c-${nextId}`)?.focus();
-                    else if (!submitting) submit();
-                  }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !submitting) submit(); }}
                 />
                 {contactErrors[f.key] && <span id={`c-${f.key}-err`} className="error-text" role="alert">{contactErrors[f.key]}</span>}
               </div>
@@ -240,7 +209,7 @@ export default function SurveyPage() {
           <div className="q-nav">
             <button className="btn btn-ghost" onClick={back} disabled={submitting}><Icon name="back" size={16} /> Back</button>
             <button className="btn btn-primary" onClick={submit} disabled={submitting}>
-              {submitting ? (<><span className="btn-spinner" aria-hidden="true" /> Submitting…</>) : 'Submit survey'}
+              {submitting ? 'Sending…' : 'Submit survey'}
             </button>
           </div>
         </div>

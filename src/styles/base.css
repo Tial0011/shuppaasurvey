@@ -75,5 +75,3 @@ img, svg { display: block; max-width: 100%; }
   .btn-sm { min-height: 44px; }
   .container { width: min(1120px, 100% - 32px); }
 }
-
-.btn-spinner { width: 16px; height: 16px; border-radius: 50%; border: 2.5px solid rgba(255,255,255,.4); border-top-color: #fff; animation: spin .7s linear infinite; }
