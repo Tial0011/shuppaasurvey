@@ -127,7 +127,7 @@ async function restCreateResponse(id: string, data: Record<string, unknown>): Pr
 interface SubmitInput {
   id: string;
   answers: Answers;
-  contact: Contact | null;
+  contact: Contact;
   source: string;
   questions: Question[];
   startedAt: number;
