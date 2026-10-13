@@ -16,10 +16,3 @@
 
 ## Build validation
 A production build could not be completed in this environment because npm dependency installation timed out and `vite/client` was unavailable. Run `npm ci` followed by `npm run build` locally or in Netlify before deploying. No live Firestore write was possible from this environment, so confirm with a real test submission after publishing the rules.
-
-## Final touches: contact details are now mandatory
-- The last step requires **full name, email address and WhatsApp / phone number**. The survey cannot be submitted without all three.
-- Inline error messages per field, re-checked as the person types. Email is lowercased; phone is cleaned to digits (a leading + is kept).
-- The submit button now always reads "Submit survey" (the old "Submit without contact" option is gone).
-- `firestore.rules` also enforces it on the server (map with name/phone/email, valid sizes, email shape), so it can't be bypassed.
-  **Publish the updated rules** (Firestore → Rules → Publish) for the server-side check to apply.

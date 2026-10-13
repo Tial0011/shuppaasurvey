@@ -84,7 +84,7 @@ Add `shuppaa.netlify.app` in Firebase → Authentication → Settings → **Auth
 1. Opens `/` or `/survey?src=instagram`. `useVisitTracking` stores `src` for the session and writes one `visit` event.
 2. First time the survey is shown, one `start` event is written (completion rate = responses ÷ starts).
 3. One question per screen. Required questions can't be skipped. Single-choice / yes-no / rating auto-advance (guarded so a quick tap on Next never skips a question).
-4. Final step: name, phone and email are required for early-access sign-up. A hidden honeypot field silently drops bots.
+4. Final step: optional name / phone / email (early access). A hidden honeypot field silently drops bots.
 5. Submit → one HTTPS `commit` to the Firestore REST API with a fixed document ID, so retries never duplicate. `createdAt` is set by the server.
    Then `stats/public.responseCount` is incremented (best-effort) for the "spots left" counter.
 6. The browser remembers the submission (`localStorage`) and shows a thank-you with a WhatsApp share button.

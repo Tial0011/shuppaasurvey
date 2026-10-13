@@ -36,18 +36,7 @@ service cloud.firestore {
                          ['answers', 'contact', 'source', 'isUnimed', 'heardFrom', 'durationSec', 'createdAt'])
                     && request.resource.data.answers is map
                     && request.resource.data.answers.size() <= 40
-                    // Name, email and phone are required, and checked here too so they can't be bypassed.
-                    && request.resource.data.contact is map
-                    && request.resource.data.contact.keys().hasOnly(['name', 'phone', 'email'])
-                    && request.resource.data.contact.name is string
-                    && request.resource.data.contact.name.size() >= 2
-                    && request.resource.data.contact.name.size() <= 80
-                    && request.resource.data.contact.phone is string
-                    && request.resource.data.contact.phone.size() >= 10
-                    && request.resource.data.contact.phone.size() <= 25
-                    && request.resource.data.contact.email is string
-                    && request.resource.data.contact.email.size() <= 120
-                    && request.resource.data.contact.email.matches('.+@.+\\..+')
+                    && (request.resource.data.contact == null || request.resource.data.contact is map)
                     && request.resource.data.createdAt == request.time
                     && request.resource.data.source is string
                     && request.resource.data.source.size() <= 40;

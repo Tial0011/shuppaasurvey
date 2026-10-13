@@ -8,11 +8,11 @@ import { useVisitTracking } from '@/hooks/useVisitTracking';
 import { getSource } from '@/utils/source';
 import { newResponseId, submitResponse, trackEvent } from '@/services/surveyService';
 import type { AnswerValue, Answers, Contact } from '@/lib/types';
-import { validateContact, type ContactErrors } from '@/utils/validation';
 import { QuestionField, isAnswered } from './QuestionField';
 import { ThankYou } from './ThankYou';
 
 const DONE_KEY = 'shuppaa_done';
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function SurveyPage() {
   useVisitTracking();
@@ -21,7 +21,6 @@ export default function SurveyPage() {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Answers>({});
   const [contact, setContact] = useState<Contact>({ name: '', phone: '', email: '' });
-  const [contactErrors, setContactErrors] = useState<ContactErrors>({});
   const [trap, setTrap] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -32,6 +31,7 @@ export default function SurveyPage() {
   const startedAt = useRef(Date.now());
   const started = useRef(false);
   const responseId = useRef(newResponseId());
+  const submittingRef = useRef(false);
 
   // Count one "start" per session, the first time the survey is actually shown.
   useEffect(() => {
@@ -104,39 +104,56 @@ export default function SurveyPage() {
       if (missingIndex >= 0) setStep(missingIndex);
       return;
     }
-    // Name, email and phone are all required.
-    const check = validateContact(contact);
-    setContactErrors(check.errors);
-    if (!check.valid) {
-      setError('Please fix the highlighted fields to finish.');
+    if (trap.trim()) {
+      setError('We couldn’t submit this response. Please refresh the page and try again.');
+      return;
+    }
+    if (submittingRef.current) return;
+
+    const name = contact.name.trim();
+    const email = contact.email.trim();
+    const phone = contact.phone.trim();
+    const hasAnyContact = Boolean(name || email || phone);
+    const digits = phone.replace(/\D/g, '');
+    if (email && (email.length > 120 || !EMAIL_RE.test(email))) {
+      setError('That email address doesn’t look right. Check it and try again.');
+      return;
+    }
+    if (phone && (digits.length < 7 || digits.length > 15)) {
+      setError('Enter a valid phone number with 7–15 digits, including your country code if needed.');
+      return;
+    }
+    if (hasAnyContact && !email && !phone) {
+      setError('To claim early access, please provide an email address or phone number. You can also submit without contact details.');
       return;
     }
 
+    const hasContact = Boolean(email || phone);
     const clean = Object.fromEntries(
       Object.entries(answers).filter(([id]) => questions.some((x) => x.id === id)),
     ) as Answers;
 
+    submittingRef.current = true;
     setSubmitting(true);
     setError('');
     try {
-      if (!trap) {
-        await submitResponse({
-          answers: clean,
-          contact: check.value,
-          id: responseId.current,
-          source: getSource(),
-          questions,
-          startedAt: startedAt.current,
-        });
-      }
+      await submitResponse({
+        answers: clean,
+        contact: hasContact ? { name, phone, email } : null,
+        id: responseId.current,
+        source: getSource(),
+        questions,
+        startedAt: startedAt.current,
+      });
       try { localStorage.setItem(DONE_KEY, '1'); } catch { /* ignore */ }
-      setFinished({ earlyAccess: true });
+      setFinished({ earlyAccess: hasContact });
     } catch (e) {
       const code = (e as { code?: string }).code ?? 'unknown';
       console.error('[Shuppaa] Survey submission failed:', e);
       const message = e instanceof Error ? e.message : 'Unknown error';
       setError(`We couldn’t send your answers (${code}). ${message} Check your connection and try again.`);
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -172,36 +189,21 @@ export default function SurveyPage() {
 
       {onContactStep && (
         <div className="card q-card" key="contact">
-          <h2>Last step: where can we reach you?</h2>
+          <h2>Want early access?</h2>
           <p className="q-help">
-            Add your name, email and WhatsApp number to finish. We’ll use them to get in touch about early access
-            (the first {settings.earlyAccessLimit} responders).
+            Leave your details and we’ll let you know when Shuppaa is ready. The first {settings.earlyAccessLimit} responders get early access.
+            Totally optional.
           </p>
           <div className="contact-grid">
-            {([
-              { key: 'name', label: 'Full name', type: 'text', auto: 'name', max: 80, mode: undefined },
-              { key: 'email', label: 'Email address', type: 'email', auto: 'email', max: 120, mode: 'email' },
-              { key: 'phone', label: 'WhatsApp / phone number', type: 'tel', auto: 'tel', max: 25, mode: 'tel' },
-            ] as const).map((f) => (
-              <div className="field" key={f.key}>
-                <label htmlFor={`c-${f.key}`}>{f.label} <span style={{ color: 'var(--danger)' }} aria-hidden="true">*</span></label>
-                <input
-                  id={`c-${f.key}`} className="input" type={f.type} autoComplete={f.auto} maxLength={f.max}
-                  inputMode={f.mode} required aria-required="true" aria-invalid={Boolean(contactErrors[f.key])}
-                  aria-describedby={contactErrors[f.key] ? `c-${f.key}-err` : undefined}
-                  style={contactErrors[f.key] ? { borderColor: 'var(--danger)' } : undefined}
-                  value={contact[f.key]}
-                  onChange={(e) => {
-                    const next = { ...contact, [f.key]: e.target.value };
-                    setContact(next);
-                    // Once someone has tried to submit, re-check as they type so errors clear immediately.
-                    if (Object.keys(contactErrors).length) setContactErrors(validateContact(next).errors);
-                  }}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !submitting) submit(); }}
-                />
-                {contactErrors[f.key] && <span id={`c-${f.key}-err`} className="error-text" role="alert">{contactErrors[f.key]}</span>}
-              </div>
-            ))}
+            <div className="field"><label htmlFor="c-name">Name</label>
+              <input id="c-name" className="input" autoComplete="name" maxLength={80} value={contact.name}
+                onChange={(e) => setContact({ ...contact, name: e.target.value })} /></div>
+            <div className="field"><label htmlFor="c-phone">WhatsApp / phone number</label>
+              <input id="c-phone" className="input" type="tel" autoComplete="tel" maxLength={25} value={contact.phone}
+                onChange={(e) => setContact({ ...contact, phone: e.target.value })} /></div>
+            <div className="field"><label htmlFor="c-email">Email</label>
+              <input id="c-email" className="input" type="email" autoComplete="email" maxLength={120} value={contact.email}
+                onChange={(e) => setContact({ ...contact, email: e.target.value })} /></div>
             <input className="honeypot" tabIndex={-1} autoComplete="off" aria-hidden="true" name="fax_number_2"
               value={trap} onChange={(e) => setTrap(e.target.value)} />
           </div>
@@ -209,7 +211,7 @@ export default function SurveyPage() {
           <div className="q-nav">
             <button className="btn btn-ghost" onClick={back} disabled={submitting}><Icon name="back" size={16} /> Back</button>
             <button className="btn btn-primary" onClick={submit} disabled={submitting}>
-              {submitting ? 'Sending…' : 'Submit survey'}
+              {submitting ? 'Sending…' : contact.email || contact.phone || contact.name ? 'Submit & claim early access' : 'Submit without contact'}
             </button>
           </div>
         </div>

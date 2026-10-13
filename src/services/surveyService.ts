@@ -107,10 +107,14 @@ async function restCreateResponse(id: string, data: Record<string, unknown>): Pr
     if (res.ok) return true;
     const body = await res.json().catch(() => ({}));
     const status: string = body?.error?.status ?? `HTTP_${res.status}`;
-    // A retry can arrive after Firestore committed the first request but the client
-    // lost its response. The create-only precondition makes this idempotent.
-    if (status === 'ALREADY_EXISTS') return false;
     const message = typeof body?.error?.message === 'string' ? body.error.message : status;
+    // Firestore REST commonly reports a create-only exists:false precondition failure
+    // as FAILED_PRECONDITION when a previous attempt already created this same ID.
+    // Do not swallow unrelated FAILED_PRECONDITION errors as successful submissions.
+    if (status === 'ALREADY_EXISTS' ||
+        (status === 'FAILED_PRECONDITION' && /already exists|document exists|exists\s*\(/i.test(message))) {
+      return false;
+    }
     throw Object.assign(new Error(message), {
       code: status.toLowerCase().replace(/_/g, '-'),
       httpStatus: res.status,
@@ -127,7 +131,7 @@ async function restCreateResponse(id: string, data: Record<string, unknown>): Pr
 interface SubmitInput {
   id: string;
   answers: Answers;
-  contact: Contact;
+  contact: Contact | null;
   source: string;
   questions: Question[];
   startedAt: number;

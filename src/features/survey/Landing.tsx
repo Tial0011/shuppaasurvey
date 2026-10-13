@@ -110,7 +110,7 @@ export default function Landing() {
             </div>
             <div className="steps">
               <div className="card step"><h3>Answer a few questions</h3><p>Short, easy questions about how you sell today. No right or wrong answers.</p></div>
-              <div className="card step"><h3>Claim early access</h3><p>Add your name, email and WhatsApp number at the end and you’re on the list for when Shuppaa launches.</p></div>
+              <div className="card step"><h3>Claim early access</h3><p>Leave your contact at the end and you’re on the list for when Shuppaa launches.</p></div>
               <div className="card step"><h3>See what we build</h3><p>We share the survey results and progress, so you can see your input at work.</p></div>
             </div>
           </div>
