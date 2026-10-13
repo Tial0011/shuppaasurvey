@@ -86,6 +86,10 @@ function enc(v: unknown): FsValue {
  * streaming connection. It is far more reliable on flaky mobile networks, and it is covered by
  * the same security rules. Throws an Error whose `code` mirrors the SDK's (e.g. permission-denied).
  */
+// Response IDs whose earlier attempt ended without a definite answer (timeout / dropped connection).
+// Only for these can a "document already exists" reply be a genuine duplicate of our own earlier save.
+const uncertainIds = new Set<string>();
+
 async function restCreateResponse(id: string, data: Record<string, unknown>): Promise<boolean> {
   const { projectId, apiKey } = firebaseConfig;
   const base = `projects/${projectId}/databases/(default)/documents`;
@@ -104,15 +108,19 @@ async function restCreateResponse(id: string, data: Record<string, unknown>): Pr
         }],
       }),
     });
-    if (res.ok) return true;
+    if (res.ok) { uncertainIds.delete(id); return true; }
     const body = await res.json().catch(() => ({}));
     const status: string = body?.error?.status ?? `HTTP_${res.status}`;
     const message = typeof body?.error?.message === 'string' ? body.error.message : status;
-    // Firestore REST commonly reports a create-only exists:false precondition failure
-    // as FAILED_PRECONDITION when a previous attempt already created this same ID.
-    // Do not swallow unrelated FAILED_PRECONDITION errors as successful submissions.
-    if (status === 'ALREADY_EXISTS' ||
-        (status === 'FAILED_PRECONDITION' && /already exists|document exists|exists\s*\(/i.test(message))) {
+    // A retry can arrive after Firestore committed the first request but the client lost the reply.
+    // The create-only precondition makes that idempotent, but we only accept it as proof of a save when:
+    //  - Firestore says ALREADY_EXISTS (the dedicated "document exists" status), or
+    //  - it says FAILED_PRECONDITION AND the message states the document already exists AND this exact
+    //    response ID had an earlier attempt that never got a definite answer.
+    // Any other FAILED_PRECONDITION (rules/config/index problems) is a real failure and is surfaced.
+    const looksLikeDuplicate = /already exists/i.test(message);
+    if (status === 'ALREADY_EXISTS' || (status === 'FAILED_PRECONDITION' && looksLikeDuplicate && uncertainIds.has(id))) {
+      uncertainIds.delete(id);
       return false;
     }
     throw Object.assign(new Error(message), {
@@ -120,8 +128,8 @@ async function restCreateResponse(id: string, data: Record<string, unknown>): Pr
       httpStatus: res.status,
     });
   } catch (e) {
-    if ((e as Error).name === 'AbortError') throw Object.assign(new Error('timeout'), { code: 'timeout' });
-    if (!(e as { code?: string }).code) throw Object.assign(e as Error, { code: 'network' });
+    if ((e as Error).name === 'AbortError') { uncertainIds.add(id); throw Object.assign(new Error('timeout'), { code: 'timeout' }); }
+    if (!(e as { code?: string }).code) { uncertainIds.add(id); throw Object.assign(e as Error, { code: 'network' }); }
     throw e;
   } finally {
     clearTimeout(timer);
@@ -131,7 +139,7 @@ async function restCreateResponse(id: string, data: Record<string, unknown>): Pr
 interface SubmitInput {
   id: string;
   answers: Answers;
-  contact: Contact | null;
+  contact: Contact;
   source: string;
   questions: Question[];
   startedAt: number;

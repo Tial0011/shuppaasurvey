@@ -128,35 +128,13 @@ export function QuestionField({ question: q, value, onChange }: Props) {
   );
 }
 
-/** Validate an answer against the current question definition, not just whether it is non-empty. */
+/** Is this answer acceptable for a required question? */
 export function isAnswered(q: Question, v: AnswerValue | undefined): boolean {
-  if (v === undefined) return false;
-
-  if (q.type === 'rating') {
-    return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 5;
+  if (v === undefined || v === '') return false;
+  if (Array.isArray(v)) {
+    if (v.length === 0) return false;
+    return v.every((x) => !isOther(x) || otherText(x).length > 0);
   }
-
-  if (q.type === 'yesno') return v === 'Yes' || v === 'No';
-
-  if (q.type === 'multi') {
-    if (!Array.isArray(v) || v.length === 0) return false;
-    const options = q.options ?? [];
-    const seen = new Set<string>();
-    for (const answer of v) {
-      if (typeof answer !== 'string' || !answer.trim() || seen.has(answer)) return false;
-      seen.add(answer);
-      if (isOther(answer)) {
-        if (!q.allowOther || !otherText(answer).trim()) return false;
-      } else if (!options.includes(answer)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  if (typeof v !== 'string' || !v.trim()) return false;
-  if (isOther(v)) return Boolean(q.allowOther && otherText(v).trim());
-  if (q.type === 'single') return (q.options ?? []).includes(v);
-  // Text answers must contain something other than whitespace.
-  return v.trim().length > 0;
+  if (typeof v === 'string' && isOther(v)) return otherText(v).length > 0;
+  return q.type !== 'rating' || typeof v === 'number';
 }
