@@ -6,13 +6,11 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useSurveyConfig } from '@/hooks/useSurveyConfig';
 import { useVisitTracking } from '@/hooks/useVisitTracking';
 import { getSource } from '@/utils/source';
-import { newResponseId, submitResponse, trackEvent, SubmitError } from '@/services/surveyService';
+import { newResponseId, submitResponse, trackEvent } from '@/services/surveyService';
 import type { AnswerValue, Answers, Contact } from '@/lib/types';
 import { QuestionField, isAnswered } from './QuestionField';
 import { ThankYou } from './ThankYou';
 
-declare const __BUILD__: string;
-const BUILD = __BUILD__;
 const DONE_KEY = 'shuppaa_done';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -25,7 +23,6 @@ export default function SurveyPage() {
   const [contact, setContact] = useState<Contact>({ name: '', phone: '', email: '' });
   const [trap, setTrap] = useState('');
   const [error, setError] = useState('');
-  const [errorDetail, setErrorDetail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [finished, setFinished] = useState<null | { earlyAccess: boolean }>(null);
   const [already, setAlready] = useState(() => {
@@ -34,7 +31,6 @@ export default function SurveyPage() {
   const startedAt = useRef(Date.now());
   const started = useRef(false);
   const responseId = useRef(newResponseId());
-  const timedOut = useRef(false);
 
   // Count one "start" per session, the first time the survey is actually shown.
   useEffect(() => {
@@ -100,6 +96,13 @@ export default function SurveyPage() {
   const back = () => { setError(''); setStep((s) => Math.max(0, s - 1)); };
 
   const submit = async () => {
+    const missing = questions.find((question) => question.required && !isAnswered(question, answers[question.id]));
+    if (missing) {
+      setError(`Please answer the required question: ${missing.label || 'required question'}.`);
+      const missingIndex = questions.findIndex((question) => question.id === missing.id);
+      if (missingIndex >= 0) setStep(missingIndex);
+      return;
+    }
     const email = contact.email.trim();
     const phone = contact.phone.trim();
     if (email && !EMAIL_RE.test(email)) return setError('That email address doesn’t look right.');
@@ -111,7 +114,7 @@ export default function SurveyPage() {
     ) as Answers;
 
     setSubmitting(true);
-    setError(''); setErrorDetail('');
+    setError('');
     try {
       if (!trap) {
         await submitResponse({
@@ -126,20 +129,10 @@ export default function SurveyPage() {
       try { localStorage.setItem(DONE_KEY, '1'); } catch { /* ignore */ }
       setFinished({ earlyAccess: hasContact });
     } catch (e) {
-      const code = e instanceof SubmitError ? e.code : 'unknown';
-      const detail = e instanceof SubmitError ? e.detail : String(e);
-      if (code === 'timeout') timedOut.current = true;
-      // The earlier slow attempt actually landed, so this retry looks like an "update": that's a success.
-      if (code === 'permission-denied' && timedOut.current) {
-        try { localStorage.setItem(DONE_KEY, '1'); } catch { /* ignore */ }
-        setFinished({ earlyAccess: hasContact });
-      } else {
-        const offline = code === 'network' || code === 'timeout';
-        setError(offline
-          ? 'We couldn’t reach the server. Your answers are saved on this phone and will be sent automatically when the connection returns. You can also tap submit again.'
-          : `We couldn’t save your answers (${code}). Please tap submit again.`);
-        setErrorDetail(detail);
-      }
+      const code = (e as { code?: string }).code ?? 'unknown';
+      console.error('[Shuppaa] Survey submission failed:', e);
+      const message = e instanceof Error ? e.message : 'Unknown error';
+      setError(`We couldn’t send your answers (${code}). ${message} Check your connection and try again.`);
     } finally {
       setSubmitting(false);
     }
@@ -195,7 +188,6 @@ export default function SurveyPage() {
               value={trap} onChange={(e) => setTrap(e.target.value)} />
           </div>
           {error && <p className="error-text q-error" role="alert">{error}</p>}
-          {errorDetail && <p className="hint" style={{ marginTop: 6, wordBreak: 'break-word' }}>Details: {errorDetail} · build {BUILD}</p>}
           <div className="q-nav">
             <button className="btn btn-ghost" onClick={back} disabled={submitting}><Icon name="back" size={16} /> Back</button>
             <button className="btn btn-primary" onClick={submit} disabled={submitting}>

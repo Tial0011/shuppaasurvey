@@ -1,17 +1,18 @@
-# Shuppaa Survey update notes
+# Submission debugging update
 
-## UX
-- Clarified the homepage's primary action by giving “Take the survey” a directional icon and keeping “Admin login” visually secondary.
-- Added responsive header action styles for narrow mobile screens so the two actions remain usable without overflowing.
+## Changes
+- Submission errors now remain visible and include the Firestore/API error message; they are also logged in the browser console.
+- Removed the unsafe behavior that showed the thank-you screen after a permission-denied error simply because a prior attempt timed out. A thank-you screen is shown only after a successful create or a confirmed duplicate-create response.
+- Final submit validates all required questions, even if the step flow was bypassed.
+- Submission retries use the same response document ID. An already-created response does not increment the public response counter again.
+- Removed the local `.env` file from this distributable. The project has the Firebase config fallback in `src/lib/firebase.ts`; use `.env.example` to configure environment variables for your own deployment if needed.
 
-## Submission reliability
-- Added a synchronous submit lock to block rapid double-clicks before React has re-rendered.
-- Revalidates required survey questions immediately before sending, including if survey configuration changes during a respondent's session.
-- Preserves the stable response ID across retries, preventing duplicate response documents after an ambiguous timeout.
-- Stops treating a `permission-denied` response after a timeout as proof of success. The UI now reports the error and lets the respondent retry safely.
-- Only increments the public response counter when Firestore confirms a new response document was created, rather than on an already-existing response retry.
-- Fixed “Submit another response” so it clears the completed marker and resets answers/contact fields and the response ID.
-- Shows a readable error state on the admin Responses page when Firestore cannot load response data.
+## Important Firebase checks
+1. Open DevTools → Console and Network, submit a test response, and inspect the `[Shuppaa] Survey submission failed` message if the UI shows an error.
+2. Confirm the Firebase project configured in Netlify is `shuppaa-survey` and that the Firestore database is enabled.
+3. Publish the included `firestore.rules` to the same Firebase project. The public response rule must allow create with the expected fields and server timestamp.
+4. In Network, inspect the request to `firestore.googleapis.com/v1/projects/shuppaa-survey/databases/(default)/documents:commit`. A 403/`PERMISSION_DENIED` points to security rules or project configuration; a 400 usually points to a request/rules data mismatch; network/CORS failures point to browser/network configuration.
+5. Verify the saved document in Firestore Console → `responses`. The public client is intentionally not allowed to read survey responses.
 
-## Validation note
-A production build could not be run in this environment because npm dependencies were not fully available in the local cache and registry installation timed out. Run `npm ci` and `npm run build` in an environment with registry access before deployment. Firebase project configuration and deployed Firestore rules should also be verified in the target environment.
+## Build validation
+A production build could not be completed in this environment because npm dependency installation timed out and `vite/client` was unavailable. Run `npm ci` followed by `npm run build` locally or in Netlify before deploying. No live Firestore write was possible from this environment, so confirm with a real test submission after publishing the rules.

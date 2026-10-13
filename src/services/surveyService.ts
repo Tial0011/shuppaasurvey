@@ -71,7 +71,6 @@ export async function trackEvent(type: EventType, source: string) {
 
 export const newResponseId = () => doc(collection(db, 'responses')).id;
 
-/* ---------------- REST helpers (plain HTTPS, no streaming connection) ---------------- */
 type FsValue = Record<string, unknown>;
 function enc(v: unknown): FsValue {
   if (v === null || v === undefined) return { nullValue: null };
@@ -82,10 +81,12 @@ function enc(v: unknown): FsValue {
   return { mapValue: { fields: Object.fromEntries(Object.entries(v as object).map(([k, x]) => [k, enc(x)])) } };
 }
 
-export interface RestResult { ok: boolean; status: number; code: string; message: string }
-
-/** Create `collection/id` with a server-set createdAt. Never throws: returns what Firestore said. */
-export async function restCreate(col: 'responses' | 'events', id: string, data: Record<string, unknown>): Promise<RestResult> {
+/**
+ * Saves the response with a plain HTTPS request to the Firestore REST API instead of the SDK's
+ * streaming connection. It is far more reliable on flaky mobile networks, and it is covered by
+ * the same security rules. Throws an Error whose `code` mirrors the SDK's (e.g. permission-denied).
+ */
+async function restCreateResponse(id: string, data: Record<string, unknown>): Promise<boolean> {
   const { projectId, apiKey } = firebaseConfig;
   const base = `projects/${projectId}/databases/(default)/documents`;
   const ctrl = new AbortController();
@@ -97,58 +98,29 @@ export async function restCreate(col: 'responses' | 'events', id: string, data: 
       signal: ctrl.signal,
       body: JSON.stringify({
         writes: [{
-          update: { name: `${base}/${col}/${id}`, fields: (enc(data).mapValue as { fields: FsValue }).fields },
+          update: { name: `${base}/responses/${id}`, fields: (enc(data).mapValue as { fields: FsValue }).fields },
           updateTransforms: [{ fieldPath: 'createdAt', setToServerValue: 'REQUEST_TIME' }],
           currentDocument: { exists: false },
         }],
       }),
     });
-    if (res.ok) return { ok: true, status: res.status, code: 'ok', message: 'saved' };
+    if (res.ok) return true;
     const body = await res.json().catch(() => ({}));
-    const status: string = body?.error?.status ?? `http-${res.status}`;
-    return {
-      // Saved by an earlier attempt we never heard back from: that counts as success.
-      ok: status === 'ALREADY_EXISTS',
-      status: res.status,
+    const status: string = body?.error?.status ?? `HTTP_${res.status}`;
+    // A retry can arrive after Firestore committed the first request but the client
+    // lost its response. The create-only precondition makes this idempotent.
+    if (status === 'ALREADY_EXISTS' || status === 'FAILED_PRECONDITION') return false;
+    const message = typeof body?.error?.message === 'string' ? body.error.message : status;
+    throw Object.assign(new Error(message), {
       code: status.toLowerCase().replace(/_/g, '-'),
-      message: String(body?.error?.message ?? status).slice(0, 300),
-    };
+      httpStatus: res.status,
+    });
   } catch (e) {
-    const aborted = (e as Error).name === 'AbortError';
-    return { ok: false, status: 0, code: aborted ? 'timeout' : 'network', message: aborted ? 'No reply within 20s' : String((e as Error).message) };
+    if ((e as Error).name === 'AbortError') throw Object.assign(new Error('timeout'), { code: 'timeout' });
+    if (!(e as { code?: string }).code) throw Object.assign(e as Error, { code: 'network' });
+    throw e;
   } finally {
     clearTimeout(timer);
-  }
-}
-
-/** Same write through the Firebase SDK, used as a second route if the REST call fails to connect. */
-async function sdkCreateResponse(id: string, data: Record<string, unknown>): Promise<RestResult> {
-  try {
-    await Promise.race([
-      setDoc(doc(db, 'responses', id), { ...data, createdAt: serverTimestamp() }),
-      new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error('No reply within 15s'), { code: 'timeout' })), 15000)),
-    ]);
-    return { ok: true, status: 200, code: 'ok', message: 'saved via SDK' };
-  } catch (e) {
-    const err = e as { code?: string; message?: string };
-    return { ok: false, status: 0, code: err.code ?? 'sdk-error', message: String(err.message ?? e).slice(0, 300) };
-  }
-}
-
-/* ---------------- Outbox: a response is never lost, even if the network drops ---------------- */
-const OUTBOX = 'shuppaa_outbox';
-interface Pending { id: string; data: Record<string, unknown> }
-const readOutbox = (): Pending[] => { try { return JSON.parse(localStorage.getItem(OUTBOX) || '[]'); } catch { return []; } };
-const writeOutbox = (list: Pending[]) => { try { localStorage.setItem(OUTBOX, JSON.stringify(list)); } catch { /* ignore */ } };
-
-/** Retry anything that failed earlier. Called on page load and whenever the phone comes back online. */
-export async function flushOutbox() {
-  for (const item of readOutbox()) {
-    const r = await restCreate('responses', item.id, item.data);
-    // Drop it once saved. A rules rejection will never succeed on retry, so drop that too.
-    if (r.ok || r.code === 'permission-denied' || r.code === 'invalid-argument') {
-      writeOutbox(readOutbox().filter((x) => x.id !== item.id));
-    }
   }
 }
 
@@ -159,12 +131,6 @@ interface SubmitInput {
   source: string;
   questions: Question[];
   startedAt: number;
-}
-
-export class SubmitError extends Error {
-  code: string;
-  detail: string;
-  constructor(code: string, detail: string) { super(detail); this.code = code; this.detail = detail; }
 }
 
 export async function submitResponse({ id, answers, contact, source, questions, startedAt }: SubmitInput) {
@@ -178,32 +144,20 @@ export async function submitResponse({ id, answers, contact, source, questions, 
   const heardFrom = heardQ && typeof answers[heardQ.id] === 'string' ? (answers[heardQ.id] as string) : null;
   const finalSource = source || sourceFromAnswer(heardFrom) || 'direct';
 
-  const data = {
+  // Stable id => a retry can never create a duplicate response.
+  const created = await restCreateResponse(id, {
     answers,
     contact,
     source: finalSource,
     isUnimed,
     heardFrom,
     durationSec: Math.max(0, Math.round((Date.now() - startedAt) / 1000)),
-  };
+  });
 
-  // Route 1: plain HTTPS. Route 2 (only if route 1 couldn't connect): the Firebase SDK.
-  let r = await restCreate('responses', id, data);
-  let detail = `REST ${r.status} ${r.code}: ${r.message}`;
-  if (!r.ok && (r.code === 'network' || r.code === 'timeout')) {
-    const r2 = await sdkCreateResponse(id, data);
-    detail += ` | SDK ${r2.code}: ${r2.message}`;
-    r = r2;
+  // Increment only for a newly created response. A retry of an already-saved
+  // response must not inflate the public count.
+  if (created) {
+    setDoc(doc(db, 'stats', 'public'), { responseCount: increment(1) }, { merge: true })
+      .catch((e) => console.warn('[Shuppaa] Response saved, but public counter update failed:', e));
   }
-
-  if (!r.ok) {
-    // Keep the answers on the device and retry automatically later (not for rule rejections).
-    if (r.code !== 'permission-denied' && r.code !== 'invalid-argument') {
-      writeOutbox([...readOutbox().filter((x) => x.id !== id), { id, data }]);
-    }
-    throw new SubmitError(r.code, detail);
-  }
-
-  // Public counter: best-effort and never awaited, so it can't hold up the thank-you screen.
-  setDoc(doc(db, 'stats', 'public'), { responseCount: increment(1) }, { merge: true }).catch(() => undefined);
 }

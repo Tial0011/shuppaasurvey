@@ -23,7 +23,7 @@ export function ResponsesProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return subscribeResponses(
-      (r) => { setResponses(r.filter((x) => x.source !== 'diagnostic')); setLoading(false); setError(null); },
+      (r) => { setResponses(r); setLoading(false); setError(null); },
       (e) => { setError(e.message); setLoading(false); },
     );
   }, []);
